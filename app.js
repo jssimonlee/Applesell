@@ -19,8 +19,18 @@
     fileName: "",
     sheetName: "",
     orders: [],
-    fixes: { phone: 0, product: 0, boxes: 0, recipient: 0, address: 0, deposit: 0, confirm: 0, privacy: 0 },
+    fixes: {
+      phone: 0,
+      product: 0,
+      boxes: 0,
+      recipient: 0,
+      address: 0,
+      deposit: 0,
+      confirm: 0,
+      privacy: 0,
+    },
     revision: 1,
+    loading: false,
   };
 
   /* ---------- 기본 유틸 ---------- */
@@ -39,11 +49,16 @@
   }
 
   function findCol(headerRow, keys) {
-    var norms = headerRow.map(function (h) { return normKey(h); });
+    var norms = headerRow.map(function (h) {
+      return normKey(h);
+    });
     for (var k = 0; k < keys.length; k++) {
       var nk = normKey(keys[k]);
       var idx = norms.indexOf(nk);
-      if (idx === -1) idx = norms.findIndex(function (h) { return h.indexOf(nk) !== -1; });
+      if (idx === -1 && nk !== "번호")
+        idx = norms.findIndex(function (h) {
+          return h.indexOf(nk) !== -1;
+        });
       if (idx !== -1) return idx;
     }
     return -1;
@@ -70,17 +85,56 @@
 
   /* ---------- 주문 데이터 추출 / 변환 ---------- */
   function buildOrdersFromRows(rows) {
-    var header = (rows[0] || []).map(function (c) { return str(c); });
+    var header = ((rows || [])[0] || []).map(function (c) {
+      return str(c);
+    });
     var col = {
-      seq: findCol(header, ["주문서번호", "주문번호", "순번", "번호", "참여자", "응답자", "participant"]),
+      seq: findCol(header, [
+        "주문서번호",
+        "주문번호",
+        "순번",
+        "번호",
+        "참여자",
+        "응답자",
+        "participant",
+      ]),
       product: findCol(header, ["사과상품선택", "사과상품", "상품", "product"]),
-      boxes: findCol(header, ["사과수량선택", "수량", "박스", "수량선택", "quantity"]),
-      recipient: findCol(header, ["주문자이름", "받는사람", "고객이름", "이름", "recipient"]),
+      boxes: findCol(header, [
+        "사과수량선택",
+        "수량",
+        "박스",
+        "수량선택",
+        "quantity",
+      ]),
+      recipient: findCol(header, [
+        "주문자이름",
+        "받는사람",
+        "고객이름",
+        "이름",
+        "recipient",
+      ]),
       phone: findCol(header, ["연락처", "전화번호", "휴대폰", "전화", "phone"]),
       address: findCol(header, ["배송지주소", "배송지", "주소", "address"]),
-      deposit: findCol(header, ["입금자", "총입금액", "입금", "deposit", "결제금액"]),
-      confirm: findCol(header, ["주문서내용확인", "주문서확인", "confirm", "주문서내용"]),
-      privacy: findCol(header, ["개인정보", "개인정부", "동의", "privacy", "개인정보수집"]),
+      deposit: findCol(header, [
+        "입금자",
+        "총입금액",
+        "입금",
+        "deposit",
+        "결제금액",
+      ]),
+      confirm: findCol(header, [
+        "주문서내용확인",
+        "주문서확인",
+        "confirm",
+        "주문서내용",
+      ]),
+      privacy: findCol(header, [
+        "개인정보",
+        "개인정부",
+        "동의",
+        "privacy",
+        "개인정보수집",
+      ]),
     };
     var orders = [];
     var fixes = { phone: 0, product: 0, boxes: 0 };
@@ -88,7 +142,9 @@
 
     for (var i = 1; i < (rows ? rows.length : 0); i++) {
       var row = rows[i] || [];
-      var get = function (idx) { return idx >= 0 && idx < row.length ? row[idx] : null; };
+      var get = function (idx) {
+        return idx >= 0 && idx < row.length ? row[idx] : null;
+      };
       var rawProduct = get(col.product);
       var rawBoxes = get(col.boxes);
       var rawPhone = get(col.phone);
@@ -96,14 +152,26 @@
       var boxes = cleanBoxes(rawBoxes);
       var phone = normalizePhone(rawPhone);
 
-      if (str(get(col.recipient)) !== "" || product !== "" || boxes !== "" || str(get(col.address)) !== "") {
-        rawCount++;
-        if (str(rawPhone).replace(/[^0-9]/g, "") !== "" && str(rawPhone).replace(/[^0-9]/g, "") !== phone) fixes.phone++;
-        if (String(rawProduct) !== product) fixes.product++;
-        if (String(rawBoxes) !== boxes) fixes.boxes++;
-      }
+      if (
+        str(get(col.recipient)) === "" &&
+        product === "" &&
+        boxes === "" &&
+        str(get(col.address)) === ""
+      )
+        continue;
+      rawCount++;
+      if (
+        str(rawPhone).replace(/[^0-9]/g, "") !== "" &&
+        str(rawPhone).replace(/[^0-9]/g, "") !== phone
+      )
+        fixes.phone++;
+      if (str(rawProduct) !== product) fixes.product++;
+      if (str(rawBoxes) !== boxes) fixes.boxes++;
 
-      var seqStr = str(get(col.seq)) !== "" ? str(get(col.seq)) : String(i);
+      var seqStr =
+        str(get(col.seq)) !== ""
+          ? str(get(col.seq))
+          : String(orders.length + 1);
       var seqVal = /^\d+$/.test(seqStr) ? parseInt(seqStr, 10) : seqStr;
       orders.push({
         seq: seqVal,
@@ -117,30 +185,73 @@
         privacy: str(get(col.privacy)),
       });
     }
-    return { header: header, col: col, orders: orders, fixes: fixes, rawCount: rawCount };
+    return {
+      header: header,
+      col: col,
+      orders: orders,
+      fixes: fixes,
+      rawCount: rawCount,
+    };
   }
 
   function processWorkbook(wb) {
     var sheetName = "";
     var rows = null;
     var bestScore = -1;
-    var sheets = (wb && wb.SheetNames) ? wb.SheetNames : [];
+    var sheets = wb && wb.SheetNames ? wb.SheetNames : [];
     for (var i = 0; i < sheets.length; i++) {
       var ws = wb.Sheets[sheets[i]];
       if (!ws) continue;
-      var data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
-      var header = (data[0] || []).map(function (c) { return str(c); });
+      var data = XLSX.utils.sheet_to_json(ws, {
+        header: 1,
+        defval: null,
+        raw: true,
+      });
+      var header = (data[0] || []).map(function (c) {
+        return str(c);
+      });
+      var hasProduct =
+        findCol(header, ["사과상품선택", "사과상품", "상품", "product"]) >= 0;
+      var hasRecipient =
+        findCol(header, [
+          "주문자이름",
+          "받는사람",
+          "고객이름",
+          "이름",
+          "recipient",
+        ]) >= 0;
+      if (!hasProduct || !hasRecipient) continue;
       var flat = header.join(" ");
       var hasApple = flat.indexOf("사과") !== -1;
       var hasOrder = /(수량|상품|주문|박스|배송)/.test(flat);
-      var score = (hasApple ? 2 : 0) + (hasOrder ? 1 : 0) + Math.min((data ? data.length : 0), 50);
+      var score =
+        (hasApple ? 2 : 0) +
+        (hasOrder ? 1 : 0) +
+        Math.min(data ? data.length : 0, 50);
       if (score > bestScore) {
         bestScore = score;
         sheetName = sheets[i];
         rows = data;
       }
     }
+    if (!rows)
+      throw new Error(
+        "상품과 주문자이름 열이 있는 주문 시트를 찾지 못했습니다. 네이버폼 응답 엑셀인지 확인해 주세요.",
+      );
     var res = buildOrdersFromRows(rows);
+    if (!res.orders.length)
+      throw new Error(
+        "주문 데이터가 없습니다. 주문이 포함된 파일을 선택해 주세요.",
+      );
+    if (
+      res.orders.some(function (o) {
+        return !Number.isSafeInteger(Number(o.seq)) || Number(o.seq) < 1;
+      })
+    ) {
+      throw new Error(
+        "주문서번호는 1 이상의 정수여야 합니다. 원본 파일의 번호를 확인해 주세요.",
+      );
+    }
     return {
       sheetName: sheetName,
       orders: res.orders,
@@ -153,144 +264,212 @@
 
   /* ---------- 미리보기 렌더링 ---------- */
   function esc(s) {
-    return String(s === null || s === undefined ? "" : s)
-      .replace(/[&<>"']/g, function (c) {
+    return String(s === null || s === undefined ? "" : s).replace(
+      /[&<>"']/g,
+      function (c) {
         if (c === "&") return "&amp;";
         if (c === "<") return "&lt;";
         if (c === ">") return "&gt;";
         if (c === '"') return "&quot;";
         return "&#39;";
-      });
+      },
+    );
+  }
+
+  var exportHeaders = [
+    "순번",
+    "사과상품선택",
+    "사과 수량선택",
+    "주문자이름",
+    "연락처",
+    "배송지주소",
+    "입금자/총입금액",
+  ];
+
+  function isSelected(order, start) {
+    return (
+      Number.isSafeInteger(start) && start >= 1 && Number(order.seq) >= start
+    );
+  }
+
+  function selectedOrders(orders, start) {
+    return orders.filter(function (o) {
+      return isSelected(o, start);
+    });
+  }
+
+  function exportRow(order, index) {
+    return [
+      index + 1,
+      order.product,
+      order.boxes,
+      order.recipient,
+      order.phone,
+      order.address,
+      order.deposit,
+    ];
+  }
+
+  function createExportWorkbook(orders, start) {
+    var selected = selectedOrders(orders, start);
+    if (!selected.length) throw new Error("다운로드할 주문이 없습니다.");
+    var ws = XLSX.utils.aoa_to_sheet(
+      [exportHeaders].concat(selected.map(exportRow)),
+    );
+    ws["!cols"] = [
+      { wch: 8 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 60 },
+      { wch: 30 },
+    ];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    return wb;
+  }
+
+  function showMessage(message) {
+    var el = document.getElementById("file-message");
+    el.textContent = message;
+    el.hidden = !message;
+  }
+
+  function selectStartRow(seq) {
+    if (state.revision === Number(seq)) return;
+    var restoreFocus = document
+      .getElementById("preview-tbody")
+      .contains(document.activeElement);
+    state.revision = Number(seq);
+    renderPreview();
+    if (restoreFocus) {
+      var row = document.querySelector(
+        'tr[data-original-number="' + state.revision + '"]',
+      );
+      if (row) row.focus({ preventScroll: true });
+    }
   }
 
   function renderPreview() {
-    var revInput = document.getElementById("revision");
-    var rev = parseInt(revInput ? revInput.value : "1", 10);
-    if (isNaN(rev) || rev < 1) rev = 1;
-    state.revision = rev;
-    var badge = document.getElementById("revision-badge");
-    if (badge) badge.textContent = "v" + rev;
-
-    var fileEl = document.getElementById("meta-file");
-    if (fileEl) fileEl.textContent = state.fileName;
-    var sheetEl = document.getElementById("meta-sheet");
-    if (sheetEl) sheetEl.textContent = state.sheetName;
-    var countEl = document.getElementById("meta-count");
-    if (countEl) countEl.textContent = state.orders.length;
-
-    var fixesEl = document.getElementById("fixes");
-    fixesEl.innerHTML = "";
-    var fixParts = [];
-    if (state.fixes.phone) fixParts.push("전화번호 정규화: " + state.fixes.phone + "건");
-    if (state.fixes.product) fixParts.push("상품명 정리: " + state.fixes.product + "건");
-    if (state.fixes.boxes) fixParts.push("수량/박스 정리: " + state.fixes.boxes + "건");
-    if (fixParts.length) {
-      fixesEl.innerHTML =
-        '<div class="fixes-title">수정 내역</div><ul><li>' + fixParts.join("</li><li>") + "</li></ul>";
-    } else {
-      fixesEl.innerHTML = '<div class="fixes-title">수정 내역</div><div>별도의 데이터 수정이 필요하지 않습니다.</div>';
-    }
-
+    var selected = selectedOrders(state.orders, state.revision);
+    document.getElementById("meta-file").textContent = state.fileName;
+    document.getElementById("selection-summary").textContent =
+      state.revision === 1
+        ? selected.length + "건 저장 · 시작할 행을 클릭하세요"
+        : "원본 " + state.revision + "번부터 · " + selected.length + "건 저장";
+    document.getElementById("btn-download").disabled = !selected.length;
     var tbody = document.getElementById("preview-tbody");
-    if (tbody) {
-      tbody.innerHTML = "";
-      for (var i = 0; i < state.orders.length; i++) {
-        var o = state.orders[i];
-        var tr = document.createElement("tr");
-        var cells = [
-          String(i + 1),
-          o.seq,
-          o.product,
-          o.boxes,
-          o.recipient,
-          o.phone,
-          o.address,
-          o.deposit,
-        ];
-        for (var c = 0; c < cells.length; c++) {
-          var td = document.createElement("td");
-          td.textContent = cells[c] === null || cells[c] === undefined ? "" : String(cells[c]);
-          tr.appendChild(td);
+    tbody.innerHTML = "";
+    var sequence = 0;
+    state.orders.forEach(function (o) {
+      var active = isSelected(o, state.revision);
+      var tr = document.createElement("tr");
+      if (!active) tr.classList.add("excluded");
+      tr.tabIndex = 0;
+      tr.setAttribute("aria-label", "원본 " + o.seq + "번부터 저장");
+      if (Number(o.seq) === state.revision)
+        tr.setAttribute("aria-current", "true");
+      tr.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          selectStartRow(o.seq);
         }
-        tbody.appendChild(tr);
-      }
-    }
-
-    var preview = document.getElementById("preview-section");
-    if (preview) {
-      preview.hidden = false;
-      preview.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-    var upload = document.getElementById("upload-section");
-    if (upload) upload.hidden = true;
+      });
+      tr.dataset.originalNumber = String(o.seq);
+      tr.addEventListener("click", function () {
+        selectStartRow(o.seq);
+      });
+      var cells = exportRow(o, active ? sequence++ : -1);
+      if (!active) cells[0] = "—";
+      cells.forEach(function (cell, c) {
+        var td = document.createElement("td");
+        td.textContent = cell;
+        if (c === 0) {
+          var source = document.createElement("span");
+          source.className = "source-number";
+          source.textContent = "(원본" + o.seq + ")";
+          td.appendChild(source);
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    document.getElementById("preview-section").hidden = false;
+    document.getElementById("upload-section").hidden = true;
+    document.body.classList.add("has-preview");
   }
 
-  /* ---------- 파일 처리 ---------- */
   function handleFile(file) {
-    state.file = file;
-    state.fileName = file.name;
+    if (state.loading) return;
+    if (!file || !/\.(xlsx|xls)$/i.test(file.name)) {
+      showMessage(".xlsx 또는 .xls 형식의 엑셀 파일을 선택해 주세요.");
+      return;
+    }
+    if (!XLSX) {
+      showMessage(
+        "엑셀 처리 도구를 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 페이지를 새로고침해 주세요.",
+      );
+      return;
+    }
+    state.loading = true;
+    document.getElementById("btn-select").disabled = true;
+    showMessage("주문 파일을 읽고 있습니다…");
     var reader = new FileReader();
+    function finish() {
+      state.loading = false;
+      document.getElementById("btn-select").disabled = false;
+      document.getElementById("file-input").value = "";
+    }
     reader.onload = function (e) {
-      var data = e.target.result;
-      var wb = XLSX.read(data, { type: "array" });
-      var res = processWorkbook(wb);
-      state.sheetName = res.sheetName;
-      state.orders = res.orders;
-      state.fixes = res.fixes;
-      state.rawCount = res.rawCount;
-      renderPreview();
+      try {
+        var wb = XLSX.read(e.target.result, { type: "array" });
+        var res = processWorkbook(wb);
+        state.file = file;
+        state.fileName = file.name;
+        state.sheetName = res.sheetName;
+        state.orders = res.orders;
+        state.fixes = res.fixes;
+        state.rawCount = res.rawCount;
+        state.revision = 1;
+        renderPreview();
+        showMessage("");
+      } catch (error) {
+        showMessage("파일을 처리하지 못했습니다. " + error.message);
+      } finally {
+        finish();
+      }
+    };
+    reader.onerror = function () {
+      showMessage("파일을 읽지 못했습니다. 다시 선택해 주세요.");
+      finish();
     };
     reader.readAsArrayBuffer(file);
   }
 
-  /* ---------- 수정본 다운로 ---------- */
   function downloadModified() {
-    if (!state.orders || !state.orders.length) return;
-    var rev = state.revision;
-    var header = [
-      null,
-      "사과상품선택",
-      "사과 수량선택",
-      "주문자이름",
-      "연락처",
-      "배송지주소",
-      "입금자/총입금액",
-      "주문서내용확인",
-      null,
-      "개인정보수집박의",
-    ];
-    var data = [];
-    for (var i = 0; i < state.orders.length; i++) {
-      var o = state.orders[i];
-      data.push([
-        o.seq,
-        o.product,
-        o.boxes,
-        o.recipient,
-        o.phone,
-        o.address,
-        o.deposit,
-        o.confirm,
-        null,
-        o.privacy,
-      ]);
+    renderPreview();
+    if (!selectedOrders(state.orders, state.revision).length) return;
+    try {
+      var wb = createExportWorkbook(state.orders, state.revision);
+      var base = state.fileName.replace(/\.[^.]*$/, "");
+      XLSX.writeFile(wb, base + "_수정본_" + state.revision + "번부터.xlsx");
+      showMessage("");
+    } catch (error) {
+      showMessage("다운로드하지 못했습니다. " + error.message);
     }
-    var ws = XLSX.utils.aoa_to_sheet([header].concat(data));
-    var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-    var base = state.fileName.replace(/\.[^.]*$/, "");
-    var outName = base + "_v" + rev + ".xlsx";
-    XLSX.writeFile(wb, outName);
   }
 
   function resetAll() {
+    showMessage("");
+    state.revision = 1;
+    document.getElementById("file-input").value = "";
     state.file = null;
     state.fileName = "";
     state.sheetName = "";
     state.orders = [];
     state.fixes = { phone: 0, product: 0, boxes: 0 };
-    var revInput = document.getElementById("revision");
-    if (revInput) revInput.value = "1";
+    document.body.classList.remove("has-preview");
     var preview = document.getElementById("preview-section");
     if (preview) preview.hidden = true;
     var upload = document.getElementById("upload-section");
@@ -305,26 +484,30 @@
     var btnDownload = document.getElementById("btn-download");
     var btnReset = document.getElementById("btn-reset");
 
-    function isValidFile(file) {
-      if (!file) return false;
-      return /\.xlsx?$/i.test(file.name || "") || /\.xls$/i.test(file.name || "");
-    }
-
     if (btnSelect && fileInput) {
-      btnSelect.addEventListener("click", function () { fileInput.click(); });
+      btnSelect.addEventListener("click", function () {
+        fileInput.click();
+      });
       fileInput.addEventListener("change", function (e) {
         var f = e.target.files && e.target.files[0];
-        if (f && isValidFile(f)) handleFile(f);
+        if (f) handleFile(f);
       });
     }
     if (dropzone) {
-      dropzone.addEventListener("dragover", function (e) { e.preventDefault(); dropzone.classList.add("dragover"); });
-      dropzone.addEventListener("dragleave", function () { dropzone.classList.remove("dragover"); });
+      dropzone.addEventListener("dragover", function (e) {
+        e.preventDefault();
+        dropzone.classList.add("dragover");
+      });
+      dropzone.addEventListener("dragleave", function () {
+        dropzone.classList.remove("dragover");
+      });
       dropzone.addEventListener("drop", function (e) {
         e.preventDefault();
         dropzone.classList.remove("dragover");
-        var f = e.dataTransfer ? e.dataTransfer.files && e.dataTransfer.files[0] : null;
-        if (f && isValidFile(f)) handleFile(f);
+        var f = e.dataTransfer
+          ? e.dataTransfer.files && e.dataTransfer.files[0]
+          : null;
+        if (f) handleFile(f);
       });
     }
 
@@ -336,6 +519,9 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       state: state,
+      selectedOrders: selectedOrders,
+      createExportWorkbook: createExportWorkbook,
+      exportHeaders: exportHeaders,
       str: str,
       normKey: normKey,
       findCol: findCol,
