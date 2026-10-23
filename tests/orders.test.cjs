@@ -79,7 +79,7 @@ test("행 위치가 아닌 원본 번호로 필터, 포함 경계와 번호 공�
   for (const start of [16, 0, -1, 1.5, null, NaN])
     assert.equal(app.selectedOrders(orders, start).length, 0);
 });
-test("실제 XLSX 왕복: 7열만 출력, 선택된 주문은 순번 1부터, 연락처는 문자열", () => {
+test("실제 XLSX 왕복: 6열만 출력, 선택된 주문은 순번 1부터, 연락처는 문자열", () => {
   const orders = app.processWorkbook(workbook()).orders;
   const wb = app.createExportWorkbook(orders, 10);
   const roundtrip = XLSX.read(
@@ -87,6 +87,8 @@ test("실제 XLSX 왕복: 7열만 출력, 선택된 주문은 순번 1부터, �
     { type: "buffer" },
   );
   assert.deepEqual(roundtrip.SheetNames, ["Sheet1"]);
+  assert.equal(app.exportHeaders.length, 6);
+  assert.equal(roundtrip.Sheets.Sheet1["!ref"], "A1:F3");
   assert.equal(roundtrip.Sheets.Sheet1["!autofilter"], undefined);
   const output = XLSX.utils.sheet_to_json(roundtrip.Sheets.Sheet1, {
     header: 1,
@@ -100,7 +102,6 @@ test("실제 XLSX 왕복: 7열만 출력, 선택된 주문은 순번 1부터, �
       "테스트 나",
       "01000000001",
       "테스트 주소 나",
-      "테스트 / 100000",
     ],
     [
       2,
@@ -109,7 +110,6 @@ test("실제 XLSX 왕복: 7열만 출력, 선택된 주문은 순번 1부터, �
       "테스트 다",
       "01000000002",
       "테스트 주소 다",
-      "테스트 / 50000",
     ],
   ]);
   assert.equal(roundtrip.Sheets.Sheet1.E2.t, "s");
@@ -161,6 +161,9 @@ test("행 선택·키보드 선택, 원본 번호 표기, 엑셀 순번 일치, 
     false,
     doc.getElementById("file-message").textContent,
   );
+  assert.equal(doc.querySelectorAll("thead th").length, 6);
+  assert.equal(doc.querySelector("tbody tr").cells.length, 6);
+  assert.equal(doc.getElementById("preview-table").textContent.includes("입금자/총입금액"), false);
   assert.equal(doc.getElementById("revision"), null);
   assert.equal(doc.body.classList.contains("has-preview"), true);
   doc.querySelector('tr[data-original-number="10"] td:nth-child(4)').click();

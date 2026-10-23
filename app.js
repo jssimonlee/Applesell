@@ -283,7 +283,6 @@
     "주문자이름",
     "연락처",
     "배송지주소",
-    "입금자/총입금액",
   ];
 
   function isSelected(order, start) {
@@ -306,7 +305,6 @@
       order.recipient,
       order.phone,
       order.address,
-      order.deposit,
     ];
   }
 
@@ -323,7 +321,6 @@
       { wch: 16 },
       { wch: 18 },
       { wch: 60 },
-      { wch: 30 },
     ];
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
