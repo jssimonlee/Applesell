@@ -80,6 +80,9 @@
   function normalizePhone(v) {
     var d = str(v).replace(/[^0-9]/g, "");
     if (d.length === 10 && d.charAt(0) === "1") d = "0" + d;
+    if (/^01\d{9}$/.test(d)) {
+      return d.slice(0, 3) + "-" + d.slice(3, 7) + "-" + d.slice(7);
+    }
     return d;
   }
 
@@ -162,7 +165,7 @@
       rawCount++;
       if (
         str(rawPhone).replace(/[^0-9]/g, "") !== "" &&
-        str(rawPhone).replace(/[^0-9]/g, "") !== phone
+        str(rawPhone) !== phone
       )
         fixes.phone++;
       if (str(rawProduct) !== product) fixes.product++;

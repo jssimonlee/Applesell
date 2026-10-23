@@ -65,7 +65,7 @@ test("주문 시트 선택, 빈 행 제외, 데이터 정리", () => {
   const res = app.processWorkbook(workbook());
   assert.equal(res.sheetName, "설문 답변");
   assert.equal(res.orders.length, 3);
-  assert.equal(res.orders[0].phone, "01020556927");
+  assert.equal(res.orders[0].phone, "010-2055-6927");
   assert.equal(res.orders[0].product, "5키로");
   assert.equal(res.orders[0].boxes, "1박스");
 });
@@ -95,22 +95,8 @@ test("실제 XLSX 왕복: 6열만 출력, 선택된 주문은 순번 1부터, �
   });
   assert.deepEqual(output, [
     app.exportHeaders,
-    [
-      1,
-      "10키로",
-      "2박스",
-      "테스트 나",
-      "01000000001",
-      "테스트 주소 나",
-    ],
-    [
-      2,
-      "5키로",
-      "1박스",
-      "테스트 다",
-      "01000000002",
-      "테스트 주소 다",
-    ],
+    [1, "10키로", "2박스", "테스트 나", "010-0000-0001", "테스트 주소 나"],
+    [2, "5키로", "1박스", "테스트 다", "010-0000-0002", "테스트 주소 다"],
   ]);
   assert.equal(roundtrip.Sheets.Sheet1.E2.t, "s");
   assert.throws(() => app.createExportWorkbook(orders, 100));
@@ -163,7 +149,10 @@ test("행 선택·키보드 선택, 원본 번호 표기, 엑셀 순번 일치, 
   );
   assert.equal(doc.querySelectorAll("thead th").length, 6);
   assert.equal(doc.querySelector("tbody tr").cells.length, 6);
-  assert.equal(doc.getElementById("preview-table").textContent.includes("입금자/총입금액"), false);
+  assert.equal(
+    doc.getElementById("preview-table").textContent.includes("입금자/총입금액"),
+    false,
+  );
   assert.equal(doc.getElementById("revision"), null);
   assert.equal(doc.body.classList.contains("has-preview"), true);
   doc.querySelector('tr[data-original-number="10"] td:nth-child(4)').click();
@@ -233,4 +222,22 @@ test("주문번호 열이 없을 때 전화번호와 혼동하지 않고 행 순
     res.orders.map((o) => o.seq),
     [1, 2],
   );
+});
+
+test("휴대폰 번호 하이픈 표시, 누락된 0 복원, 이미 변환된 번호 유지", () => {
+  for (const value of [
+    "01012345678",
+    1012345678,
+    "010-1234-5678",
+    "010 1234 5678",
+  ]) {
+    assert.equal(app.normalizePhone(value), "010-1234-5678");
+  }
+  assert.equal(app.normalizePhone(null), "");
+  assert.equal(app.normalizePhone(""), "");
+  const res = app.buildOrdersFromRows([
+    ["상품", "이름", "연락처"],
+    ["사과", "테스트", "010-1234-5678"],
+  ]);
+  assert.equal(res.fixes.phone, 0);
 });
